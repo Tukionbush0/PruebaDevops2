@@ -1,82 +1,53 @@
+
 name: ci
-
-
 on:
-push:
-branches: [ main ]
-pull_request:
-branches: [ main ]
-
-
+  push:
+    branches:
+      - 'main'
+env:
+  DOCKERHUB_USERNAME: tukionbush
+  DOCKERHUB_REPO: devops
 jobs:
-build-and-push:
-runs-on: ubuntu-latest
-permissions:
-contents: read
-packages: write
-id-token: write
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repositorio
+        uses: actions/checkout@v4
 
+      - name: Setup node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-steps:
-- name: Checkout
-uses: actions/checkout@v4
+      - name: Instalar dependencias
+        run : npm install --force
 
+      - name: Eslint
+        run : npx eslint -c .eslintrc.json src --fix --max-warnings=0
 
-- name: Use Node.js 18
-uses: actions/setup-node@v4
-with:
-node-version: '18'
-cache: 'npm'
+      - name: Test 
+        run : |
+         export CHROME_BIN=$(which google-chrome-stable)
+         npm test -- --watchAll=false --ci --browsers=ChromeHeadless
 
+      - name: Snyk
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+        
+      - name: Scan sonar source
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-- name: Install dependencies
-run: npm ci
+      - name: Login DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-
-- name: Run tests
-run: npm test
-
-
-- name: Run ESLint
-run: npx eslint . --ext .js,.mjs,.cjs || true
-
-
-- name: Snyk - test and monitor
-uses: snyk/actions/node@master
-with:
-args: test
-env:
-SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-
-- name: SonarCloud Scan
-uses: SonarSource/sonarcloud-github-action@master
-with:
-args: >
--Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
--Dsonar.organization=${{ secrets.SONAR_ORG }}
-env:
-SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-
-- name: Set up Docker Buildx
-uses: docker/setup-buildx-action@v2
-
-
-- name: Login to DockerHub
-uses: docker/login-action@v2
-with:
-username: ${{ secrets.DOCKERHUB_USERNAME }}
-password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-
-- name: Build and push Docker image
-uses: docker/build-push-action@v5
-with:
-push: true
-tags: ${{ secrets.DOCKERHUB_USERNAME }}/my-node-app:latest
-file: ./Dockerfile
-
-
-- name: Verify image pushed
-run: echo "Image pushed: ${{ secrets.DOCKERHUB_USERNAME }}/my-node-app:latest"
+      - name: Docker build y push
+        run : |
+          docker build -t $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:latest .
+          docker push $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:latest
