@@ -1,42 +1,45 @@
+name: CI
 
-name: ci
 on:
   push:
     branches:
-      - 'main'
+      - main
+
 env:
   DOCKERHUB_USERNAME: tukionbush
   DOCKERHUB_REPO: devops
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repositorio
         uses: actions/checkout@v4
 
-      - name: Setup node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Instalar dependencias
-        run : npm install --force
+        run: npm install --force
 
-      - name: Eslint
-        run : npx eslint -c .eslintrc.json src --fix --max-warnings=0
+      - name: ESLint
+        run: npx eslint -c .eslintrc.json src --fix --max-warnings=0
 
-      - name: Test 
-        run : |
-         export CHROME_BIN=$(which google-chrome-stable)
-         npm test -- --watchAll=false --ci --browsers=ChromeHeadless
+      - name: Test
+        run: |
+          export CHROME_BIN=$(which google-chrome-stable)
+          npm test -- --watchAll=false --ci --browsers=ChromeHeadless
 
       - name: Snyk
         uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
-        
-      - name: Scan sonar source
+
+      - name: Scan Sonar Source
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -48,6 +51,6 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Docker build y push
-        run : |
+        run: |
           docker build -t $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:latest .
           docker push $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:latest
